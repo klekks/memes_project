@@ -26,7 +26,6 @@ async def create_upload_file(filepath: str, file: UploadFile):
     try:
         return await Memes.create_meme(file)
     except Exception as e:
-        print(e)
         raise HTTPException(503, "Media file was not uploaded")
 
 
@@ -35,5 +34,4 @@ async def create_upload_file(filename: str):
     try:
         return await Memes.get_meme(filename)
     except Exception as e:
-        print(e)
         raise HTTPException(404, "Media file not found")
