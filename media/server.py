@@ -2,9 +2,7 @@ import uuid
 from os import path
 
 from fastapi import FastAPI, UploadFile, HTTPException
-
 from contextlib import asynccontextmanager
-
 from model import Memes, create_tables, delete_tables
 
 
