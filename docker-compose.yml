@@ -5,4 +5,35 @@ services:
     build: media/
     command: uvicorn server:app --host 0.0.0.0 --port 8081
     ports:
-      - "80:8081"
+      - "8080:8081"
+    depends_on:
+      - s3
+      - db
+
+  server:
+    build: server/
+    command: uvicorn server:app --host 0.0.0.0 --port 8080
+    ports:
+      - "80:8080"
+    depends_on:
+      - media
+      - s3
+      - db
+  db:
+    build: db/
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data/pgdata
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 512M
+#    ports:
+#      - "5454:5432"
+
+  s3:
+    build: s3/
+
+volumes:
+  pgdata:
+    driver: local
