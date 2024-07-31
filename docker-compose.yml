@@ -9,7 +9,8 @@ services:
     depends_on:
       - s3
       - db
-
+    env_file:
+      - minio.env
   server:
     build: server/
     command: uvicorn server:app --host 0.0.0.0 --port 8080
@@ -37,8 +38,7 @@ services:
     expose:
       - 9000
       - 9001
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+    env_file:
+      - minio.env
 volumes:
   pgdata:

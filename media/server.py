@@ -1,84 +1,119 @@
-from pydantic import BaseModel
 from io import BytesIO
-from fastapi import FastAPI, File, UploadFile, Path
-from starlette.responses import StreamingResponse
+
+from fastapi import FastAPI, File, UploadFile, HTTPException, status
+
 from storage import MinioHandler
+
+import uuid
+
+from validators import validator_existing_file
+from typing import Annotated
+from responses import UploadFileResponse, MinioServerDisconnected, UnknownProblem, StatusOk
+
+
+def randname() -> str:
+    return str(uuid.uuid4())
 
 
 app = FastAPI()
+MinioHandler()
 
 
-class CustomException(Exception):
-    http_code: int
-    code: str
-    message: str
-
-    def __init__(self, http_code: int = None, code: str = None, message: str = None):
-        self.http_code = http_code if http_code else 500
-        self.code = code if code else str(self.http_code)
-        self.message = message
-
-
-class UploadFileResponse(BaseModel):
-    bucket_name: str
-    file_name: str
-    url: str
-
-
-@app.post("/", response_model=UploadFileResponse)
+@app.post(
+    "/",
+    response_model=UploadFileResponse,
+    status_code=status.HTTP_201_CREATED,
+    description="Endpoint for uploading files on s3 storage. Takes file as body of request.",
+    tags=["file"],
+    summary="File uploading endpoint",
+    responses={
+        status.HTTP_201_CREATED: {
+            "model": UploadFileResponse,
+            "description": "File created successfully.",
+        },
+        status.HTTP_502_BAD_GATEWAY: {
+            "model": MinioServerDisconnected,
+            "description": "Connection with Minio S3 server is not established."
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": UnknownProblem,
+            "description": "An unknown exception was thrown while processing the request."
+        }
+    }
+)
 async def upload_file_to_minio(file: UploadFile = File(...)):
     try:
         data = file.file.read()
 
-        file_name = " ".join(file.filename.strip().split())
+        file_name = randname()
 
-        data_file = MinioHandler().get_instance().put_object(
+        data_file = await MinioHandler().get_instance().put_object(
             file_name=file_name,
             file_data=BytesIO(data),
-            content_type=file.content_type
-        )
+            content_type=file.content_type)
+
         return data_file
-    except CustomException as e:
-        print(e)
-        raise e
     except Exception as e:
-        print(e)
-        if e.__class__.__name__ == 'MaxRetryError':
-            raise CustomException(http_code=400, code='400', message='Can not connect to Minio')
-        raise CustomException(code='999', message='Server Error')
+        if e.__class__.__name__ == "RuntimeError":
+            raise HTTPException(502, detail="Minio server is not available")
+        raise HTTPException(500, detail="Unknown exception during request processing.")
 
 
-@app.delete("/{filePath}")
-async def delete_file_from_minio(*, filePath: str = Path(title="The relative path to the file", min_length=1, max_length=500)):
+@app.delete("/{file_path}",
+            response_model=StatusOk,
+            status_code=status.HTTP_200_OK,
+            description="Endpoint for removing file from s3 storage. Takes filename as path argument.",
+            tags=["file"],
+            summary="File removing endpoint",
+            responses={
+                status.HTTP_200_OK: {
+                    "model": StatusOk,
+                    "description": "File deleted successfully.",
+                },
+                status.HTTP_502_BAD_GATEWAY: {
+                    "model": MinioServerDisconnected,
+                    "description": "Connection with Minio S3 server is not established."
+                },
+                status.HTTP_500_INTERNAL_SERVER_ERROR: {
+                    "model": UnknownProblem,
+                    "description": "An unknown exception was thrown while processing the request."
+                }
+            })
+async def delete_file_from_minio(file_path: Annotated[str, validator_existing_file]):
     try:
-        minio_client = MinioHandler().get_instance()
-        if not minio_client.check_file_name_exists(minio_client.bucket_name, filePath):
-            raise CustomException(http_code=400, code='400',
-                                  message='File not exists')
-
-        minio_client.client.remove_object(minio_client.bucket_name, filePath)
+        await MinioHandler().get_instance().delete_object(file_path)
         return {"status": "ok"}
-    except CustomException as e:
-        raise e
     except Exception as e:
-        if e.__class__.__name__ == 'MaxRetryError':
-            raise CustomException(http_code=400, code='400', message='Can not connect to Minio')
-        raise CustomException(http_code=500, code='999', message='Server Error')
+        if e.__class__.__name__ == "RuntimeError":
+            raise HTTPException(502, detail="Minio server is not available")
+        raise HTTPException(500, detail="Unknown exception during request processing.")
 
 
-@app.get("/{filePath}")
-def download_file_from_minio(*, filePath: str = Path(title="The relative path to the file", min_length=1, max_length=500)):
+@app.get("/{file_path}",
+         response_model=StatusOk,
+         status_code=status.HTTP_200_OK,
+         description="Endpoint for getting file from s3 storage. Takes filename as path argument.",
+         tags=["file"],
+         summary="File retrieving endpoint",
+         responses={
+             status.HTTP_200_OK: {
+                 "model": StatusOk,
+                 "description": "File returned successfully.",
+             },
+             status.HTTP_502_BAD_GATEWAY: {
+                 "model": MinioServerDisconnected,
+                 "description": "Connection with Minio S3 server is not established."
+             },
+             status.HTTP_500_INTERNAL_SERVER_ERROR: {
+                 "model": UnknownProblem,
+                 "description": "An unknown exception was thrown while processing the request."
+             }
+         })
+async def download_file_from_minio(file_path: Annotated[str, validator_existing_file]):
     try:
-        minio_client = MinioHandler().get_instance()
-        if not minio_client.check_file_name_exists(minio_client.bucket_name, filePath):
-            raise CustomException(http_code=400, code='400',
-                                  message='File not exists')
-
-        file = minio_client.client.get_object(minio_client.bucket_name, filePath).read()
-        return StreamingResponse(BytesIO(file))
-    except CustomException as e:
-        raise e
+        url = await MinioHandler().get_instance().get_object(file_path)
+        return {"url": url}
     except Exception as e:
-        if e.__class__.__name__ == 'MaxRetryError':
-            raise CustomException(http_code=400, code='400', message='Can not connect to Minio')
-        raise CustomException(code='999', message='Server Error')
+        if e.__class__.__name__ == "RuntimeError":
+            raise HTTPException(502, detail="Minio server is not available")
+        raise HTTPException(500, detail="Unknown exception during request processing.)")
