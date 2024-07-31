@@ -3,27 +3,18 @@ from pydantic import BaseModel
 
 class UploadFileResponse(BaseModel):
     detail: list = [
-        {
-            "msg": "File created",
-            "bucket_name": "string",
-            "file_name": "string"
-        }
+        {"msg": "File created", "bucket_name": "string", "file_name": "string"}
     ]
 
     def __init__(self, **kwargs):
         BaseModel.__init__(self, **kwargs)
         self.detail[0].update(
-            {
-                "bucket_name": kwargs['bucket_name'],
-                "file_name": kwargs['file_name']
-            }
+            {"bucket_name": kwargs["bucket_name"], "file_name": kwargs["file_name"]}
         )
 
 
 class MinioServerDisconnected(BaseModel):
-    detail: list = [
-        {"msg": "Connection is not established."}
-    ]
+    detail: list = [{"msg": "Connection is not established."}]
 
 
 class UnknownProblem(BaseModel):
@@ -33,6 +24,4 @@ class UnknownProblem(BaseModel):
 
 
 class StatusOk(BaseModel):
-    detail: list = [
-        {"msg": "ok"}
-    ]
+    detail: list = [{"msg": "ok"}]

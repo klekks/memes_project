@@ -17,7 +17,7 @@ class MinioHandler:
 
     @staticmethod
     def get_instance():
-        """ Static access method. """
+        """Static access method."""
         if not MinioHandler.__instance:
             MinioHandler.__instance = MinioHandler()
 
@@ -47,22 +47,28 @@ class MinioHandler:
         url = await self.client.presigned_get_object(
             bucket_name=self.bucket_name,
             object_name=object_name,
-            expires=timedelta(hours=minio_config.MINIO_PRESIGNED_URL_EXPIRED_HOURS)
+            expires=timedelta(hours=minio_config.MINIO_PRESIGNED_URL_EXPIRED_HOURS),
         )
         return url
 
     async def check_file_name_exists(self, file_name):
         try:
-            await self.client.stat_object(bucket_name=self.bucket_name, object_name=file_name)
+            await self.client.stat_object(
+                bucket_name=self.bucket_name, object_name=file_name
+            )
             return True
         except:
             return False
 
     async def get_object(self, filename):
-        return await self.client.presigned_get_object(bucket_name=self.bucket_name, object_name=filename)
+        return await self.client.presigned_get_object(
+            bucket_name=self.bucket_name, object_name=filename
+        )
 
     async def delete_object(self, file_name):
-        await self.client.remove_object(bucket_name=self.bucket_name, object_name=file_name)
+        await self.client.remove_object(
+            bucket_name=self.bucket_name, object_name=file_name
+        )
 
     async def put_object(self, file_data, file_name, content_type):
         try:
@@ -73,12 +79,9 @@ class MinioHandler:
                 data=file_data,
                 content_type=content_type,
                 length=-1,
-                part_size=minio_config.MINIO_UPLOAD_PART_SIZE
+                part_size=minio_config.MINIO_UPLOAD_PART_SIZE,
             )
-            data_file = {
-                'bucket_name': self.bucket_name,
-                'file_name': object_name
-            }
+            data_file = {"bucket_name": self.bucket_name, "file_name": object_name}
             return data_file
         except:
             return None
