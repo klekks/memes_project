@@ -1,7 +1,6 @@
 from io import BytesIO
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
-
+from fastapi import FastAPI, File, HTTPException, status, UploadFile
 from storage import MinioHandler
 
 import uuid
@@ -13,6 +12,8 @@ from responses import (
     MinioServerDisconnected,
     UnknownProblem,
     StatusOk,
+    NotExists,
+    UrlResponse
 )
 
 
@@ -20,8 +21,22 @@ def randname() -> str:
     return str(uuid.uuid4())
 
 
-app = FastAPI()
-MinioHandler()
+description = """
+A service that allows you to download and download data from S3 storage. 
+You can add, extract, and delete files using the POST, GET, and DELETE methods, respectively.
+"""
+
+
+app = FastAPI(
+    title="MediaService",
+    description=description,
+    summary="MediaService: API layer for S3 storage",
+    version="0.1.0",
+    contact={
+        "name": "Ilya Petrov",
+        "email": "klekks@ya.ru",
+    }
+)
 
 
 @app.post(
@@ -81,6 +96,10 @@ async def upload_file_to_minio(file: UploadFile = File(...)):
             "model": StatusOk,
             "description": "File deleted successfully.",
         },
+        status.HTTP_404_NOT_FOUND: {
+            "model": NotExists,
+            "description": "File not found."
+        },
         status.HTTP_502_BAD_GATEWAY: {
             "model": MinioServerDisconnected,
             "description": "Connection with Minio S3 server is not established.",
@@ -103,15 +122,19 @@ async def delete_file_from_minio(file_path: Annotated[str, validator_existing_fi
 
 @app.get(
     "/{file_path}",
-    response_model=StatusOk,
+    response_model=UrlResponse,
     status_code=status.HTTP_200_OK,
     description="Endpoint for getting file from s3 storage. Takes filename as path argument.",
     tags=["file"],
     summary="File retrieving endpoint",
     responses={
         status.HTTP_200_OK: {
-            "model": StatusOk,
+            "model": UrlResponse,
             "description": "File returned successfully.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": NotExists,
+            "description": "File not found."
         },
         status.HTTP_502_BAD_GATEWAY: {
             "model": MinioServerDisconnected,
@@ -126,8 +149,30 @@ async def delete_file_from_minio(file_path: Annotated[str, validator_existing_fi
 async def download_file_from_minio(file_path: Annotated[str, validator_existing_file]):
     try:
         url = await MinioHandler().get_instance().get_object(file_path)
-        return {"url": url}
+        return {"url": url }
     except Exception as e:
         if e.__class__.__name__ == "RuntimeError":
             raise HTTPException(502, detail="Minio server is not available")
         raise HTTPException(500, detail="Unknown exception during request processing.)")
+
+
+@app.get(
+    "/",
+    response_model=StatusOk,
+    status_code=status.HTTP_200_OK,
+    description="Endpoint for checking status of service.",
+    tags=["status"],
+    summary="Check status of service",
+    responses={
+        status.HTTP_200_OK: {
+            "model": StatusOk,
+            "description": "File returned successfully.",
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": UnknownProblem,
+            "description": "An unknown exception was thrown while processing the request.",
+        },
+    },
+)
+async def download_file_from_minio():
+    return StatusOk()

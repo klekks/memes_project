@@ -25,3 +25,18 @@ class UnknownProblem(BaseModel):
 
 class StatusOk(BaseModel):
     detail: list = [{"msg": "ok"}]
+
+
+class UrlResponse(BaseModel):
+    detail: list = [{"msg": "ok", "url": "string"}]
+
+    def __init__(self, url="string"):
+        BaseModel.__init__(self)
+        self.detail[0].update(
+            {"url": url}
+        )
+
+
+class NotExists(BaseModel):
+    detail: list = [{"msg": "File not exists"}]
+

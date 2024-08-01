@@ -11,15 +11,14 @@ ALLOWED_IMAGE_TYPES = {"png", "jpeg", "gif", "apng", "webp"}
 IMAGE_MAX_SIZE = 8 * 1024 * 1024  # 8MB
 
 
-
 @asynccontextmanager
-async def lifespan(fap: FastAPI):
+async def dev_lifespan(fap: FastAPI):
     await create_tables()
     yield
     await delete_tables()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=dev_lifespan)
 
 
 @app.get("/memes")

@@ -1,7 +1,7 @@
 from fastapi import Path, Depends, HTTPException
 
 from storage import MinioHandler
-from typing import Annotated
+from responses import NotExists
 
 
 class ValidPath:
@@ -22,7 +22,7 @@ class FileExists:
         client = MinioHandler().get_instance()
         if await client.check_file_name_exists(file_path):
             return file_path
-        raise HTTPException(status_code=400, detail="File not exists")
+        raise HTTPException(status_code=404, detail=NotExists().detail)
 
 
 validator_existing_file = Depends(FileExists())

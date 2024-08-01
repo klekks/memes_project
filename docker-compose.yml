@@ -40,5 +40,6 @@ services:
       - 9001
     env_file:
       - minio.env
+
 volumes:
   pgdata:
