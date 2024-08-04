@@ -1,14 +1,16 @@
-from fastapi import FastAPI, Query, UploadFile, HTTPException, Header, Depends
+from fastapi import FastAPI, Query, UploadFile, HTTPException
 from contextlib import asynccontextmanager
 
 from model import Memes, create_tables, delete_tables
-
-
 from media_connector import upload_file, delete_file, download_file
 
+from responses import MemesInfo, MemesFullInfo
 
-ALLOWED_IMAGE_TYPES = {"png", "jpeg", "gif", "apng", "webp"}
-IMAGE_MAX_SIZE = 8 * 1024 * 1024  # 8MB
+from validators import image_validator, valid_memes, image_validation_func
+from settings import service_settings
+
+ALLOWED_IMAGE_TYPES = set(service_settings.ALLOWED_IMAGE_TYPES.split(','))
+IMAGE_MAX_SIZE = service_settings.MAX_IMAGE_SIZE
 
 
 @asynccontextmanager
@@ -23,54 +25,57 @@ app = FastAPI(lifespan=dev_lifespan)
 
 @app.get("/memes")
 async def get_memes(offset: int = Query(0, ge=0, title="Number of items will be skipped"),
-                    limit: int = Query(10, ge=1, le=50, title="Number of items on the page")):
+                    limit: int = Query(10, ge=1, le=service_settings.PAGINATION_MAX_PER_PAGE,
+                                       title="Number of items on the page")):
     return await Memes.get_memes(offset, limit)
 
 
-@app.get("/memes/{id}")
-async def get_meme_by_id(id: int):
-    meme_info = await Memes.get_meme_by_id(id)
-    if meme_info is None:
-        raise HTTPException(status_code=404, detail="Memes not found.")
-
-    meme_image = await download_file(meme_info.filename)
-    meme_image.headers['Content-Type'] = meme_info.mimetype
-    meme_image.headers['Text'] = meme_info.text
-    return meme_image
+# TODO: await download_file returns json with {"url" : "url"} to direct download
+@app.get("/memes/{memes_id}", response_model=MemesFullInfo)
+async def get_meme_by_id(memes: Memes = valid_memes):
+    memes_info = await download_file(memes.filename)
+    del memes.filename
+    memes.url = memes_info['url']
+    return memes
 
 
-@app.post("/memes")
-async def add_new_meme(file: UploadFile,
-                       text: str = Query(min_length=1, max_length=256, title="Description of the meme")
-                       ):
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=415, detail="You can only pin an image to memes")
+@app.post("/memes", response_model=MemesInfo)
+async def add_new_meme(file: image_validator,
+                       text: str = Query(min_length=1,
+                                         max_length=service_settings.MAX_MEMES_TEXT_LENGTH,
+                                         description="Description of the meme. It will be attached to the image.")):
+    upload_result = await upload_file(file)
 
-    if not file.content_type[6:] in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=415, detail="Image format is not supported")
-
-    if file.size > IMAGE_MAX_SIZE:
-        raise HTTPException(status_code=413, detail=f"Image size should be at most 8MB, your image is {file.size // 1024} KB")
-
-    upload_result = dict(await upload_file(file))
     if "file_name" in upload_result:
         filename = upload_result["file_name"]
     else:
         raise HTTPException(status_code=500, detail="Error while loading image on storage")
 
-    return await Memes.create_meme(filename, text, file.content_type)
+    return await Memes.create_meme(file.filename, filename, text, file.content_type)
 
 
-@app.delete("/memes/{id}")
-async def delete_memes(id: int):
-
-    meme_info = await Memes.get_meme_by_id(id)
-    if meme_info is None:
-        raise HTTPException(status_code=404, detail="Memes not found.")
-
-    is_deleted = await Memes.delete_by_id(id)
+@app.delete("/memes/{memes_id}", response_model=MemesInfo)
+async def delete_memes(memes: Memes = valid_memes):
+    is_deleted = await Memes.delete_by_id(memes.id)
 
     if is_deleted:
-        return await delete_file(meme_info.filename)
+        await delete_file(memes.filename)
+        return memes
 
     raise HTTPException(status_code=500, detail="Error while deleting memes")
+
+
+@app.put("/memes/{memes_id}", response_model=MemesInfo)
+async def update_memes(file: UploadFile = None,
+                       memes: Memes = valid_memes,
+                       new_text: str = Query(None, min_length=1, max_length=256, title="Description of the meme")):
+
+    if new_text is not None and memes.text != new_text:
+        await memes.update(text=new_text)
+
+    if file is not None:
+        image_validation_func(file)
+        upload_result = await upload_file(file)
+        await memes.update(filename=upload_result['file_name'])
+
+    return await Memes.get_meme_by_id(memes.id)

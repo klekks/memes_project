@@ -4,8 +4,6 @@ ADD requirements.txt /server/
 
 RUN pip install -r /server/requirements.txt
 
-ADD server.py /server/
-ADD model.py /server/
-ADD media_connector.py /server/
+COPY *.py /server/
 
 WORKDIR /server/
