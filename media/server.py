@@ -3,6 +3,8 @@ from io import BytesIO
 from fastapi import FastAPI, File, HTTPException, status, UploadFile
 from storage import MinioHandler
 
+import settings
+
 import uuid
 
 from validators import validator_existing_file
@@ -26,6 +28,10 @@ A service that allows you to download and download data from S3 storage.
 You can add, extract, and delete files using the POST, GET, and DELETE methods, respectively.
 """
 
+debug_params = {}
+if not settings.minio_config.DEBUG:
+    debug_params.update({"docs_url": None, "redoc_url": None})
+
 
 app = FastAPI(
     title="MediaService",
@@ -36,8 +42,7 @@ app = FastAPI(
         "name": "Ilya Petrov",
         "email": "klekks@ya.ru",
     },
-    docs_url=None,
-    redoc_url=None
+    **debug_params
 )
 
 

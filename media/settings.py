@@ -11,6 +11,7 @@ class MinioStorageConfiguration(BaseSettings):
     MINIO_UPLOAD_PART_SIZE: int = 10 * 1024 * 1024
     MINIO_BUCKET_NAME: str = "memes-storage"
     MINIO_URL: str = "storage:9000"
+    DEBUG: int = 0
 
 
 minio_auth = MinioAuthSettings()

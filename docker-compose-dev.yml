@@ -9,7 +9,7 @@ services:
     depends_on:
       - storage
     env_file:
-      - minio.env
+      - minio-dev.env
 
   server:
     build: server/
@@ -43,12 +43,16 @@ services:
   nginx:
     image: nginx:1.16.0-alpine
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx-dev.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
       - "9000:9000"
+      - "5432:5432"
+      - "8081:8081"
     depends_on:
       - storage
       - server
+      - db
+      - media
 volumes:
   pgdata:
