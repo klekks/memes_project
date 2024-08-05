@@ -35,7 +35,9 @@ app = FastAPI(
     contact={
         "name": "Ilya Petrov",
         "email": "klekks@ya.ru",
-    }
+    },
+    docs_url=None,
+    redoc_url=None
 )
 
 

@@ -1,16 +1,14 @@
-from fastapi import FastAPI, Query, UploadFile, HTTPException
+from fastapi import FastAPI, Query, UploadFile, HTTPException, status
 from contextlib import asynccontextmanager
 
-from model import Memes, create_tables, delete_tables
+from model import Meme, create_tables, delete_tables
 from media_connector import upload_file, delete_file, download_file
 
-from responses import MemesInfo, MemesFullInfo
+from responses import MemeInfo, MemeFullInfo, MemeNotFound, InvalidMediaFile, ExternalServiceError
 
-from validators import image_validator, valid_memes, image_validation_func
+from validators import image_validator, valid_meme, image_validation_func
 from settings import service_settings
-
-ALLOWED_IMAGE_TYPES = set(service_settings.ALLOWED_IMAGE_TYPES.split(','))
-IMAGE_MAX_SIZE = service_settings.MAX_IMAGE_SIZE
+from typing import List
 
 
 @asynccontextmanager
@@ -20,26 +18,101 @@ async def dev_lifespan(fap: FastAPI):
     await delete_tables()
 
 
-app = FastAPI(lifespan=dev_lifespan)
+description = """
+API service for managing memes with a text description. Solving a test task for MADSOFT.
+"""
+
+app = FastAPI(
+                title="MemesArchive",
+                description=description,
+                summary="MemesArchive: cry and laugh",
+                version="0.1.0",
+                contact={
+                    "name": "Ilya Petrov",
+                    "email": "klekks@ya.ru",
+                },
+                lifespan=dev_lifespan)
 
 
-@app.get("/memes")
+@app.get(
+    "/memes",
+    response_model=List[MemeInfo],
+    status_code=status.HTTP_200_OK,
+    summary="Get list of memes",
+    tags=['meme', 'memes'],
+    responses={
+        status.HTTP_200_OK: {
+            "model": List[MemeInfo],
+            "description": "Success. meme_id and text of memes were returned."
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ExternalServiceError,
+            "description": "An error occurred while connecting to an external service."
+        }
+    },
+    description="Endpoint for getting a list of available memes with pagination."
+)
 async def get_memes(offset: int = Query(0, ge=0, title="Number of items will be skipped"),
                     limit: int = Query(10, ge=1, le=service_settings.PAGINATION_MAX_PER_PAGE,
                                        title="Number of items on the page")):
-    return await Memes.get_memes(offset, limit)
+    return await Meme.get_memes(offset, limit)
 
 
-# TODO: await download_file returns json with {"url" : "url"} to direct download
-@app.get("/memes/{memes_id}", response_model=MemesFullInfo)
-async def get_meme_by_id(memes: Memes = valid_memes):
-    memes_info = await download_file(memes.filename)
-    del memes.filename
-    memes.url = memes_info['url']
-    return memes
+@app.get(
+    "/memes/{meme_id}",
+    response_model=MemeFullInfo,
+    status_code=status.HTTP_200_OK,
+    summary="Get meme by meme_id",
+    tags=['meme'],
+    responses={
+        status.HTTP_200_OK: {
+            "model": MemeInfo,
+            "description": "Success. meme_id and text were returned."
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": MemeNotFound,
+            "description": "Meme was not found.",
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ExternalServiceError,
+            "description": "An error occurred while connecting to an external service."
+        }
+    })
+async def get_meme_by_id(meme: Meme = valid_meme):
+    meme_info = await download_file(meme.new_file_name)
+    if 'url' not in meme_info:
+        raise HTTPException(status_code=500,
+                            detail=ExternalServiceError("Error extracting from s3 storage.").details())
+
+    meme.url = meme_info['url'].replace("storage", "localhost", 1)  # TODO: MINIO hates changing domain name
+    return meme
 
 
-@app.post("/memes", response_model=MemesInfo)
+@app.post(
+    "/memes",
+    response_model=MemeInfo,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create meme with text and image",
+    tags=['meme'],
+    responses={
+        status.HTTP_201_CREATED: {
+            "model": MemeInfo,
+            "description": "Meme created successful. meme_id and text were returned."
+        },
+        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE: {
+            "model": InvalidMediaFile,
+            "description": "The maximum allowed image size has been exceeded."
+        },
+        status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: {
+            "model": InvalidMediaFile,
+            "description": "The uploaded file is not an image or this type of image is not supported."
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ExternalServiceError,
+            "description": "An error occurred while connecting to an external service."
+        }
+
+    })
 async def add_new_meme(file: image_validator,
                        text: str = Query(min_length=1,
                                          max_length=service_settings.MAX_MEMES_TEXT_LENGTH,
@@ -49,33 +122,82 @@ async def add_new_meme(file: image_validator,
     if "file_name" in upload_result:
         filename = upload_result["file_name"]
     else:
-        raise HTTPException(status_code=500, detail="Error while loading image on storage")
+        raise HTTPException(status_code=500,
+                            detail=ExternalServiceError("Error uploading to s3 storage.").details())
 
-    return await Memes.create_meme(file.filename, filename, text, file.content_type)
-
-
-@app.delete("/memes/{memes_id}", response_model=MemesInfo)
-async def delete_memes(memes: Memes = valid_memes):
-    is_deleted = await Memes.delete_by_id(memes.id)
-
-    if is_deleted:
-        await delete_file(memes.filename)
-        return memes
-
-    raise HTTPException(status_code=500, detail="Error while deleting memes")
+    return await Meme.create_meme(file.filename, filename, text, file.content_type)
 
 
-@app.put("/memes/{memes_id}", response_model=MemesInfo)
+@app.delete(
+    "/memes/{meme_id}",
+    response_model=MemeInfo,
+    status_code=status.HTTP_200_OK,
+    summary="Delete existing meme",
+    tags=['meme'],
+    responses={
+        status.HTTP_200_OK: {
+            "model": MemeInfo,
+            "description": "Meme deleted successful. meme_id and text were returned."
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": MemeNotFound,
+            "description": "Meme was not found.",
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ExternalServiceError,
+            "description": "An error occurred while connecting to an external service."
+        }
+    })
+async def delete_memes(meme: Meme = valid_meme):
+    is_deleted = await Meme.delete_by_id(meme.meme_id)
+
+    if is_deleted and (await delete_file(meme.new_file_name)):
+        return meme
+
+    raise HTTPException(status_code=500,
+                        detail=ExternalServiceError("Error deleting from s3 storage.").details())
+
+
+@app.put(
+    "/memes/{meme_id}",
+    response_model=MemeInfo,
+    status_code=status.HTTP_200_OK,
+    summary="Update meme text and/or image",
+    tags=['meme'],
+    responses={
+        status.HTTP_200_OK: {
+            "model": MemeInfo,
+            "description": "Meme updated successful. meme_id and text were returned."
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": MemeNotFound,
+            "description": "Meme was not found.",
+        },
+        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE: {
+            "model": InvalidMediaFile,
+            "description": "The maximum allowed image size has been exceeded."
+        },
+        status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: {
+            "model": InvalidMediaFile,
+            "description": "The uploaded file is not an image or this type of image is not supported."
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ExternalServiceError,
+            "description": "An error occurred while connecting to an external service."
+        }
+    })
 async def update_memes(file: UploadFile = None,
-                       memes: Memes = valid_memes,
-                       new_text: str = Query(None, min_length=1, max_length=256, title="Description of the meme")):
-
-    if new_text is not None and memes.text != new_text:
-        await memes.update(text=new_text)
+                       meme: Meme = valid_meme,
+                       text: str = Query(None, min_length=1, max_length=256, title="New description of the meme")):
+    if text is not None and meme.text != text:
+        await meme.update(text=text)
 
     if file is not None:
         image_validation_func(file)
         upload_result = await upload_file(file)
-        await memes.update(filename=upload_result['file_name'])
+        if 'file_name' not in upload_result:
+            raise HTTPException(status_code=500,
+                                detail=ExternalServiceError("Error uploading to s3 storage.").details())
+        await meme.update(file_name=upload_result['file_name'])
 
-    return await Memes.get_meme_by_id(memes.id)
+    return await Meme.get_meme_by_id(meme.meme_id)

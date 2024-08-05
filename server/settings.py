@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class ServiceSettings(BaseSettings):
     MAX_IMAGE_SIZE: int = 8 * 1024 * 1024  # in bytes
-    ALLOWED_IMAGE_TYPES: str = "png,jpeg,gif,apng,webp"
+    ALLOWED_IMAGE_TYPES: str = "png,jpeg,gif,apng"
     PAGINATION_MAX_PER_PAGE: int = 50
     MAX_MEMES_TEXT_LENGTH: int = 256
     DB_TABLE_NAME: str = "Memes"

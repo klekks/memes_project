@@ -4,22 +4,22 @@ services:
   media:
     build: media/
     command: uvicorn server:app --host 0.0.0.0 --port 8081
-    ports:
-      - "8080:8081"
+    expose:
+      - "8081"
     depends_on:
-      - s3
-      - db
+      - storage
     env_file:
       - minio.env
 
   server:
     build: server/
     command: uvicorn server:app --host 0.0.0.0 --port 8080
+    expose:
+      - "8080"
     ports:
-      - "80:8080"
+      - "8080:8080"
     depends_on:
       - media
-      - s3
       - db
     env_file:
       - postgres.env
@@ -29,18 +29,27 @@ services:
     volumes:
       - ./pgdata:/var/lib/postgresql/data/pgdata
     expose:
-      - 5432
+      - "5432"
     env_file:
       - postgres.env
 
-  s3:
+  storage:
     image: minio/minio:latest
     command: minio server /data --console-address :9001
     expose:
-      - 9000
-      - 9001
+      - "9000"
     env_file:
       - minio.env
 
+  nginx:
+    image: nginx:1.16.0-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "9000:9000"
+    depends_on:
+      - storage
+      - server
 volumes:
   pgdata:

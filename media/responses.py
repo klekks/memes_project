@@ -1,8 +1,9 @@
 from pydantic import BaseModel
+from typing_extensions import TypedDict
 
 
 class UploadFileResponse(BaseModel):
-    detail: list = [
+    detail: list[TypedDict("Response", {"msg": str, "bucket_name": str, "file_name": str})] = [
         {"msg": "File created", "bucket_name": "string", "file_name": "string"}
     ]
 
@@ -14,21 +15,21 @@ class UploadFileResponse(BaseModel):
 
 
 class MinioServerDisconnected(BaseModel):
-    detail: list = [{"msg": "Connection is not established."}]
+    detail: list[TypedDict("MinioError", {"msg": str})] = [{"msg": "Connection is not established."}]
 
 
 class UnknownProblem(BaseModel):
-    detail: list = [
+    detail: list[TypedDict("Error", {"msg": str})] = [
         {"msg": "An unknown exception was thrown while processing the request."}
     ]
 
 
 class StatusOk(BaseModel):
-    detail: list = [{"msg": "ok"}]
+    detail: list[TypedDict("Ok", {"msg": str})] = [{"msg": "ok"}]
 
 
 class UrlResponse(BaseModel):
-    detail: list = [{"msg": "ok", "url": "string"}]
+    detail: list[TypedDict("MinioError", {"msg": str, "url": str})] = [{"msg": "ok", "url": "string"}]
 
     def __init__(self, url="string"):
         BaseModel.__init__(self)
@@ -38,5 +39,5 @@ class UrlResponse(BaseModel):
 
 
 class NotExists(BaseModel):
-    detail: list = [{"msg": "File not exists"}]
+    detail: list[TypedDict("File not exists", {"msg": str})] = [{"msg": "File not exists"}]
 
