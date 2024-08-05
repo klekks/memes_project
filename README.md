@@ -31,3 +31,12 @@ To run in dev mode (all services will be available from the outside, docs in Med
 - The text should not be empty
 - Only jpeg, gif, png images are accepted
 - The image size should not exceed 8 megabytes
+
+## Content 
+- Minio S3-storage
+- PostgresDB
+- FastAPI Media service, being a layer between s3 storage and the json api
+- - POST, DELETE, GET any file.
+- FastAPI Memes service, containing the business logic of the application
+- - POST, PUT images with text, DELETE memes, GET memes (returns text and download URL)
+- nginx: for proxy from host to containers 
