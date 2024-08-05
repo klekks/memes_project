@@ -8,7 +8,7 @@ Meme Storage allows you to upload, store and delete memes with a text descriptio
 ### Build
 0. Install dependencies: ```sudo apt install git docker docker-compose```
 1. Clone repo: ```git clone https://github.com/klekks/memes_project```
-2. Build docker image: ```cd memes_progect && sudo docker-compose build```
+2. Build docker image: ```cd memes_project && sudo docker-compose build```
 
 ### Run
 3. Run project: ```sudo docker-compose up -d```
